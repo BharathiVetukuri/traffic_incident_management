@@ -28,6 +28,16 @@ class IncidentUpdate(BaseSchema):
         return self
 
 
+class IncidentDuplicateCheckRequest(BaseSchema):
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+    timestamp: datetime
+
+
+class IncidentDuplicateCheckResponse(BaseSchema):
+    is_duplicate: bool
+
+
 class IncidentRead(BaseSchema):
     id: uuid.UUID
     type: str

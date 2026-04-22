@@ -6,11 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.incident import IncidentStatus, SeverityLevel
-from app.schemas.incident import IncidentCreate, IncidentRead, IncidentUpdate
+from app.schemas.incident import (
+    IncidentCreate,
+    IncidentDuplicateCheckRequest,
+    IncidentDuplicateCheckResponse,
+    IncidentRead,
+    IncidentUpdate,
+)
 from app.services.incidents import (
     DatabaseConflictError,
     DatabaseOperationError,
     create_incident,
+    detect_duplicate_incident,
     list_incidents,
     update_incident,
 )
@@ -29,9 +36,27 @@ async def create_incident_route(
         incident = await create_incident(db, payload)
         return IncidentRead.model_validate(incident)
     except DatabaseConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Incident create conflict.") from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except DatabaseOperationError as exc:
         logger.exception("Database error during incident create")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error.") from exc
+
+
+@router.post("/check-duplicate", response_model=IncidentDuplicateCheckResponse)
+async def check_duplicate_incident_route(
+    payload: IncidentDuplicateCheckRequest,
+    db: AsyncSession = Depends(get_db),
+) -> IncidentDuplicateCheckResponse:
+    try:
+        is_duplicate = await detect_duplicate_incident(
+            db=db,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
+            timestamp=payload.timestamp,
+        )
+        return IncidentDuplicateCheckResponse(is_duplicate=is_duplicate)
+    except DatabaseOperationError as exc:
+        logger.exception("Database error during duplicate incident check")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error.") from exc
 
 
@@ -61,7 +86,7 @@ async def update_incident_route(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
         return IncidentRead.model_validate(incident)
     except DatabaseConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Incident update conflict.") from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except DatabaseOperationError as exc:
         logger.exception("Database error during incident update")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error.") from exc

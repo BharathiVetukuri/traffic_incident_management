@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -17,7 +18,60 @@ class DatabaseOperationError(Exception):
     """Raised when a generic DB operation fails."""
 
 
+def _normalize_timestamp(timestamp: datetime) -> datetime:
+    if timestamp.tzinfo is None:
+        return timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc)
+
+
+async def detect_duplicate_incident(
+    db: AsyncSession,
+    latitude: float,
+    longitude: float,
+    timestamp: datetime,
+    radius_meters: float = 100.0,
+    lookback_minutes: int = 10,
+) -> bool:
+    normalized_timestamp = _normalize_timestamp(timestamp)
+    window_start = normalized_timestamp - timedelta(minutes=lookback_minutes)
+
+    query = select(Incident).where(
+        Incident.created_at >= window_start,
+        Incident.created_at <= normalized_timestamp,
+    )
+
+    try:
+        result = await db.execute(query)
+        recent_incidents = list(result.scalars().all())
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise DatabaseOperationError("Failed to detect duplicate incident due to a database error.") from exc
+
+    for incident in recent_incidents:
+        distance_meters = IncidentService.haversine_distance_meters(
+            latitude,
+            longitude,
+            incident.latitude,
+            incident.longitude,
+        )
+        if distance_meters <= radius_meters:
+            return True
+
+    return False
+
+
 async def create_incident(db: AsyncSession, incident_in: IncidentCreate) -> Incident:
+    is_duplicate = await detect_duplicate_incident(
+        db=db,
+        latitude=incident_in.latitude,
+        longitude=incident_in.longitude,
+        timestamp=datetime.now(timezone.utc),
+    )
+    if is_duplicate:
+        raise DatabaseConflictError(
+            "Duplicate incident detected within 100 meters in the last 10 minutes."
+        )
+
     nearby_count = incident_in.nearby_incident_count or 0
     priority_score = IncidentService.calculate_priority(incident_in.severity, nearby_count)
 
@@ -97,3 +151,4 @@ async def update_incident(
     except SQLAlchemyError as exc:
         await db.rollback()
         raise DatabaseOperationError("Failed to update incident due to a database error.") from exc
+
