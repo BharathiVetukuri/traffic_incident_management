@@ -3,7 +3,12 @@ import { getIncidents, Incident } from '../services/api';
 
 type SortOrder = 'asc' | 'desc' | null;
 
-const IncidentList = () => {
+interface IncidentListProps {
+  onLogout: () => void;
+  user: string;
+}
+
+const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +62,13 @@ const IncidentList = () => {
 
   return (
     <div>
-      <h2>Incidents</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2>Incidents</h2>
+        <div>
+          <span>Welcome, {user}!</span>
+          <button onClick={onLogout} style={{ marginLeft: '10px' }}>Logout</button>
+        </div>
+      </div>
       <div>
         <label>
           Severity:
