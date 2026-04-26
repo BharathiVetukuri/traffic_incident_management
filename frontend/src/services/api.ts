@@ -25,3 +25,11 @@ export const getIncidents = async (severity?: string, status?: string): Promise<
   const response = await api.get(`/incidents?${params.toString()}`);
   return response.data;
 };
+
+export const updateIncident = async (
+  id: string,
+  updates: Partial<Pick<Incident, 'severity' | 'status'>>
+): Promise<Incident> => {
+  const response = await api.put(`/incidents/${id}`, updates);
+  return response.data;
+};

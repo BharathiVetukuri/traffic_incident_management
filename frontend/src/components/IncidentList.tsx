@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { getIncidents, Incident } from '../services/api';
+import { getIncidents, updateIncident, Incident } from '../services/api';
 
 type SortOrder = 'asc' | 'desc' | null;
 
@@ -15,6 +15,12 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
   const [severityFilter, setSeverityFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSeverity, setEditSeverity] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<string>('');
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  const isAdmin = user === 'admin';
 
   const fetchIncidents = async () => {
     try {
@@ -37,6 +43,32 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
       setSortOrder('asc');
     } else {
       setSortOrder(null);
+    }
+  };
+
+  const handleEdit = (incident: Incident) => {
+    setEditingId(incident.id);
+    setEditSeverity(incident.severity);
+    setEditStatus(incident.status);
+    setUpdateError(null);
+  };
+
+  const handleCancel = () => {
+    setEditingId(null);
+    setEditSeverity('');
+    setEditStatus('');
+    setUpdateError(null);
+  };
+
+  const handleSave = async (incidentId: string) => {
+    try {
+      setUpdateError(null);
+      await updateIncident(incidentId, { severity: editSeverity as 'LOW' | 'MEDIUM' | 'HIGH', status: editStatus as 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' });
+      setIncidents(incidents.map(inc => inc.id === incidentId ? { ...inc, severity: editSeverity as 'LOW' | 'MEDIUM' | 'HIGH', status: editStatus as 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' } : inc));
+      setEditingId(null);
+    } catch (err) {
+      setUpdateError('Failed to update incident');
+      console.error(err);
     }
   };
 
@@ -92,6 +124,7 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
           Sort by Priority {sortOrder === 'desc' ? '↓' : sortOrder === 'asc' ? '↑' : ''}
         </button>
       </div>
+      {updateError && <div style={{ color: 'red', marginTop: '10px' }}>Error: {updateError}</div>}
       <table>
         <thead>
           <tr>
@@ -100,6 +133,7 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
             <th>Severity</th>
             <th>Status</th>
             <th>Priority Score</th>
+            {isAdmin && <th>Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -107,9 +141,41 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
             <tr key={incident.id}>
               <td>{incident.id}</td>
               <td>{incident.type}</td>
-              <td>{incident.severity}</td>
-              <td>{incident.status}</td>
+              <td>
+                {editingId === incident.id ? (
+                  <select value={editSeverity} onChange={(e) => setEditSeverity(e.target.value)}>
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                  </select>
+                ) : (
+                  incident.severity
+                )}
+              </td>
+              <td>
+                {editingId === incident.id ? (
+                  <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                    <option value="OPEN">Open</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="RESOLVED">Resolved</option>
+                  </select>
+                ) : (
+                  incident.status
+                )}
+              </td>
               <td>{incident.priority_score.toFixed(2)}</td>
+              {isAdmin && (
+                <td>
+                  {editingId === incident.id ? (
+                    <>
+                      <button onClick={() => handleSave(incident.id)} style={{ marginRight: '5px' }}>Save</button>
+                      <button onClick={handleCancel}>Cancel</button>
+                    </>
+                  ) : (
+                    <button onClick={() => handleEdit(incident)}>Edit</button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
