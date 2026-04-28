@@ -4,22 +4,21 @@ import { getIncidents, updateIncident, Incident } from '../services/api';
 type SortOrder = 'asc' | 'desc' | null;
 
 interface IncidentListProps {
-  onLogout: () => void;
   user: string;
+  onLogout: () => void;
 }
 
-const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
+const IncidentList = ({ user, onLogout }: IncidentListProps) => {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<SortOrder>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editSeverity, setEditSeverity] = useState<string>('');
-  const [editStatus, setEditStatus] = useState<string>('');
+  const [editingIncidentId, setEditingIncidentId] = useState<string | null>(null);
+  const [editSeverity, setEditSeverity] = useState<Incident['severity']>('LOW');
+  const [editStatus, setEditStatus] = useState<Incident['status']>('OPEN');
   const [updateError, setUpdateError] = useState<string | null>(null);
-
   const isAdmin = user === 'admin';
 
   const fetchIncidents = async () => {
@@ -46,28 +45,29 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
     }
   };
 
-  const handleEdit = (incident: Incident) => {
-    setEditingId(incident.id);
+  const startEdit = (incident: Incident) => {
+    setEditingIncidentId(incident.id);
     setEditSeverity(incident.severity);
     setEditStatus(incident.status);
     setUpdateError(null);
   };
 
-  const handleCancel = () => {
-    setEditingId(null);
-    setEditSeverity('');
-    setEditStatus('');
+  const cancelEdit = () => {
+    setEditingIncidentId(null);
     setUpdateError(null);
   };
 
-  const handleSave = async (incidentId: string) => {
+  const saveEdit = async (incidentId: string) => {
+    setUpdateError(null);
     try {
-      setUpdateError(null);
-      await updateIncident(incidentId, { severity: editSeverity as 'LOW' | 'MEDIUM' | 'HIGH', status: editStatus as 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' });
-      setIncidents(incidents.map(inc => inc.id === incidentId ? { ...inc, severity: editSeverity as 'LOW' | 'MEDIUM' | 'HIGH', status: editStatus as 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' } : inc));
-      setEditingId(null);
+      const updated = await updateIncident(incidentId, {
+        severity: editSeverity,
+        status: editStatus,
+      });
+      setIncidents((prev) => prev.map((incident) => (incident.id === incidentId ? updated : incident)));
+      setEditingIncidentId(null);
     } catch (err) {
-      setUpdateError('Failed to update incident');
+      setUpdateError('Failed to update incident. Please try again.');
       console.error(err);
     }
   };
@@ -95,12 +95,16 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>Incidents</h2>
         <div>
-          <span>Welcome, {user}!</span>
-          <button onClick={onLogout} style={{ marginLeft: '10px' }}>Logout</button>
+          <p>Welcome <strong>{user}</strong>!</p>
         </div>
+        <button onClick={onLogout}>Logout</button>
       </div>
+      {updateError && (
+        <div style={{ color: 'red', marginTop: '0.75rem' }}>
+          {updateError}
+        </div>
+      )}
       <div>
         <label>
           Severity:
@@ -124,7 +128,6 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
           Sort by Priority {sortOrder === 'desc' ? '↓' : sortOrder === 'asc' ? '↑' : ''}
         </button>
       </div>
-      {updateError && <div style={{ color: 'red', marginTop: '10px' }}>Error: {updateError}</div>}
       <table>
         <thead>
           <tr>
@@ -133,7 +136,7 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
             <th>Severity</th>
             <th>Status</th>
             <th>Priority Score</th>
-            {isAdmin && <th>Actions</th>}
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -141,41 +144,47 @@ const IncidentList: React.FC<IncidentListProps> = ({ onLogout, user }) => {
             <tr key={incident.id}>
               <td>{incident.id}</td>
               <td>{incident.type}</td>
-              <td>
-                {editingId === incident.id ? (
-                  <select value={editSeverity} onChange={(e) => setEditSeverity(e.target.value)}>
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                  </select>
-                ) : (
-                  incident.severity
-                )}
-              </td>
-              <td>
-                {editingId === incident.id ? (
-                  <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                    <option value="OPEN">Open</option>
-                    <option value="IN_PROGRESS">In Progress</option>
-                    <option value="RESOLVED">Resolved</option>
-                  </select>
-                ) : (
-                  incident.status
-                )}
-              </td>
+              <td>{incident.severity}</td>
+              <td>{incident.status}</td>
               <td>{incident.priority_score.toFixed(2)}</td>
-              {isAdmin && (
-                <td>
-                  {editingId === incident.id ? (
-                    <>
-                      <button onClick={() => handleSave(incident.id)} style={{ marginRight: '5px' }}>Save</button>
-                      <button onClick={handleCancel}>Cancel</button>
-                    </>
-                  ) : (
-                    <button onClick={() => handleEdit(incident)}>Edit</button>
-                  )}
-                </td>
-              )}
+              <td>
+                <a
+                  href={`https://maps.google.com/maps?q=${incident.latitude},${incident.longitude}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  View on Maps
+                </a>
+                {isAdmin && editingIncidentId !== incident.id && (
+                  <button
+                    type="button"
+                    onClick={() => startEdit(incident)}
+                    style={{ marginLeft: '8px' }}
+                  >
+                    Edit
+                  </button>
+                )}
+                {isAdmin && editingIncidentId === incident.id && (
+                  <span style={{ marginLeft: '8px' }}>
+                    <select value={editSeverity} onChange={(e) => setEditSeverity(e.target.value as Incident['severity'])}>
+                      <option value="LOW">Low</option>
+                      <option value="MEDIUM">Medium</option>
+                      <option value="HIGH">High</option>
+                    </select>
+                    <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as Incident['status'])} style={{ marginLeft: '8px' }}>
+                      <option value="OPEN">Open</option>
+                      <option value="IN_PROGRESS">In Progress</option>
+                      <option value="RESOLVED">Resolved</option>
+                    </select>
+                    <button type="button" onClick={() => saveEdit(incident.id)} style={{ marginLeft: '8px' }}>
+                      Save
+                    </button>
+                    <button type="button" onClick={cancelEdit} style={{ marginLeft: '4px' }}>
+                      Cancel
+                    </button>
+                  </span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
