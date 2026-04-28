@@ -18,11 +18,26 @@ export interface Incident {
   updated_at: string;
 }
 
+export interface IncidentCreatePayload {
+  type: string;
+  severity: Incident['severity'];
+  latitude: number;
+  longitude: number;
+  status?: Incident['status'];
+}
+
 export const getIncidents = async (severity?: string, status?: string): Promise<Incident[]> => {
   const params = new URLSearchParams();
   if (severity) params.append('severity', severity);
   if (status) params.append('status', status);
   const response = await api.get(`/incidents?${params.toString()}`);
+  return response.data;
+};
+
+export const createIncident = async (
+  payload: IncidentCreatePayload
+): Promise<Incident> => {
+  const response = await api.post('/incidents', payload);
   return response.data;
 };
 

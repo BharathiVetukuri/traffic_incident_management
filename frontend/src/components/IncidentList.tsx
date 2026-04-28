@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { getIncidents, updateIncident, Incident } from '../services/api';
+import { createIncident, getIncidents, updateIncident, Incident } from '../services/api';
 
 type SortOrder = 'asc' | 'desc' | null;
 
@@ -19,6 +19,14 @@ const IncidentList = ({ user, onLogout }: IncidentListProps) => {
   const [editSeverity, setEditSeverity] = useState<Incident['severity']>('LOW');
   const [editStatus, setEditStatus] = useState<Incident['status']>('OPEN');
   const [updateError, setUpdateError] = useState<string | null>(null);
+
+  const [newType, setNewType] = useState('');
+  const [newSeverity, setNewSeverity] = useState<Incident['severity']>('LOW');
+  const [newLatitude, setNewLatitude] = useState('');
+  const [newLongitude, setNewLongitude] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   const isAdmin = user === 'admin';
 
   const fetchIncidents = async () => {
@@ -72,6 +80,50 @@ const IncidentList = ({ user, onLogout }: IncidentListProps) => {
     }
   };
 
+  const handleCreateIncident = async () => {
+    setCreateError(null);
+
+    if (!newType.trim()) {
+      setCreateError('Incident type is required.');
+      return;
+    }
+
+    const latitude = Number(newLatitude);
+    const longitude = Number(newLongitude);
+
+    if (Number.isNaN(latitude) || latitude < -90 || latitude > 90) {
+      setCreateError('Latitude must be a number between -90 and 90.');
+      return;
+    }
+
+    if (Number.isNaN(longitude) || longitude < -180 || longitude > 180) {
+      setCreateError('Longitude must be a number between -180 and 180.');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const created = await createIncident({
+        type: newType.trim(),
+        severity: newSeverity,
+        latitude,
+        longitude,
+        status: 'OPEN',
+      });
+      setIncidents((prev) => [created, ...prev]);
+      setNewType('');
+      setNewSeverity('LOW');
+      setNewLatitude('');
+      setNewLongitude('');
+      setCreateError(null);
+    } catch (err) {
+      setCreateError('Failed to create incident. Please try again.');
+      console.error(err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const getSortedIncidents = () => {
     if (sortOrder === null) return incidents;
     
@@ -100,6 +152,62 @@ const IncidentList = ({ user, onLogout }: IncidentListProps) => {
         </div>
         <button onClick={onLogout}>Logout</button>
       </div>
+      {isAdmin && (
+        <div style={{ border: '1px solid #ccc', padding: '1rem', margin: '1rem 0' }}>
+          <h3>Add New Incident</h3>
+          {createError && (
+            <div style={{ color: 'red', marginBottom: '0.75rem' }}>
+              {createError}
+            </div>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end' }}>
+            <label>
+              Type:
+              <input
+                type="text"
+                value={newType}
+                onChange={(e) => setNewType(e.target.value)}
+                style={{ marginLeft: '0.5rem' }}
+              />
+            </label>
+            <label>
+              Severity:
+              <select
+                value={newSeverity}
+                onChange={(e) => setNewSeverity(e.target.value as Incident['severity'])}
+                style={{ marginLeft: '0.5rem' }}
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+              </select>
+            </label>
+            <label>
+              Latitude:
+              <input
+                type="number"
+                value={newLatitude}
+                onChange={(e) => setNewLatitude(e.target.value)}
+                placeholder="-90 to 90"
+                style={{ marginLeft: '0.5rem', width: '8rem' }}
+              />
+            </label>
+            <label>
+              Longitude:
+              <input
+                type="number"
+                value={newLongitude}
+                onChange={(e) => setNewLongitude(e.target.value)}
+                placeholder="-180 to 180"
+                style={{ marginLeft: '0.5rem', width: '8rem' }}
+              />
+            </label>
+            <button type="button" onClick={handleCreateIncident} disabled={creating}>
+              {creating ? 'Creating...' : 'Create Incident'}
+            </button>
+          </div>
+        </div>
+      )}
       {updateError && (
         <div style={{ color: 'red', marginTop: '0.75rem' }}>
           {updateError}
